@@ -1,0 +1,24 @@
+*****ESP-NOW*****
+--> Arduino framework, kód, link:
+	--> ~400 kbit/s sebességre volt képes, kód link:
+--> ESP-IDF framework kód: 
+	--> <NEM VOLT TESZTELVE>
+	
+	
+	
+	
+	
+	
+
+*****Access Point (AP) - Station (STA)*****
+
+--> Arduino framework kód, link:
+	--> Ideális kornyezetben (a két ESP32 egymás mellett az asztalon + egyik legkevésbé terhelt Wi-Fi csatorna kiválasztva): ~8000 kbit/s
+		sebességre volt képes.
+	
+--> ESP-IDF framework kód, link:
+	--> Ideális kornyezetben (a két ESP32 egymás mellett az asztalon + egyik legkevésbé terhelt Wi-Fi csatorna kiválasztva): ~12000 kbit/s
+		sebességre volt képes.
+	--> Ezt a konfigurációt tovább teszteltuk távolságra, <FOLYTATNI, UJRA LETESZTELNI>
+	
+
