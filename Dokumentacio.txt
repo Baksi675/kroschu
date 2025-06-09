@@ -2,16 +2,9 @@
 --> Arduino framework, kód, link:
 	--> ~400 kbit/s sebességre volt képes, kód link:
 --> ESP-IDF framework kód: 
-	--> <NEM VOLT TESZTELVE>
-	
-	
-	
-	
-	
-	
+	--> ~800 kbit/s sebességre volt képes, de nem volt stabil (kifagyogatott)
 
 *****Access Point (AP) - Station (STA)*****
-
 --> Arduino framework kód, link:
 	--> Ideális kornyezetben (a két ESP32 egymás mellett az asztalon + egyik legkevésbé terhelt Wi-Fi csatorna kiválasztva): ~8000 kbit/s
 		sebességre volt képes.
@@ -20,5 +13,12 @@
 	--> Ideális kornyezetben (a két ESP32 egymás mellett az asztalon + egyik legkevésbé terhelt Wi-Fi csatorna kiválasztva): ~12000 kbit/s
 		sebességre volt képes.
 	--> Ezt a konfigurációt tovább teszteltuk távolságra, <FOLYTATNI, UJRA LETESZTELNI>
+	
+*****ESP WiFi Mesh*****
+--> Router nélkul nem valósítható meg, ESP-MDF támogatta a router nélkuli megvalósítást, de már 2021 óta nem fejlesztik.
+
+*****painlesMesh*****
+--> Arduino IDE konyvtár lassú, kb. 500 kbit/s
+
 	
 

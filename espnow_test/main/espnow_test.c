@@ -1,6 +1,9 @@
-#define RECEIVER 1
+#include <stdbool.h>
+#define RECEIVER 0
+#define SENDER 1
 
 #if SENDER
+
 #include "esp_err.h"			// Required for ESP_ERROR_CHECK()
 #include "esp_event.h"			// Required for event driver programming (esp_event_... functions)
 #include "esp_wifi.h"			// Required for the Wi-Fi
@@ -8,6 +11,7 @@
 #include "esp_netif.h"			// Required for esp_netif_init()
 #include "esp_now.h"			// Required for ESP-NOW
 #include "string.h"				// Required for memcpy
+#include "esp_log.h"
 
 	// INFO: Max number of paired devices is 20, with encryption it is 17. Default number of devices is set to 7, this can be changed with CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM
 	
@@ -17,6 +21,16 @@
 	// 4. If security is enabled LMK must be set
 	// 5. Station or SoftAP interface must be initialized before sending data with ESP-NOW
 	// 6. Set channel (range 0-14), 0 - current channel, choose the one with the least amount of load
+
+static const char *TAG = "ESP-NOW Sender";
+static bool canSend = true;
+
+static void espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status)
+{
+    //ESP_LOGI(TAG, "Send status: %s", (status == ESP_NOW_SEND_SUCCESS) ? "Success" : "Fail");
+    canSend = true;
+}
+
 
 void app_main(void)
 {
@@ -46,16 +60,33 @@ void app_main(void)
 	memcpy(peer.peer_addr, "\xFF\xFF\xFF\xFF\xFF\xFF", 6);	// memcpy ==> Fills in the peer_addr field with the broadcast MAC address
 	ESP_ERROR_CHECK(esp_now_add_peer(&peer));			// esp_now_add_peer ==> Adds the peer to the peer list, only required when using unicast or multiple unicast (multicast is not natively present)
 
-	uint8_t data[] = "hello espnow";	// The message to be sent
-	ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, data, sizeof(data)));	// esp_now_send ==> Sends the data to the peer
-	while(1) {
+	ESP_ERROR_CHECK(esp_now_register_send_cb(espnow_send_cb));
 
+	/*uint8_t data[] = "hello espnow";	// The message to be sent
+	ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, data, sizeof(data)));*/	// esp_now_send ==> Sends the data to the peer
+
+	uint8_t data[1000];	// The message to be sent
+	memset(data, 'A', sizeof(data));
+
+	//ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, data, sizeof(data)));
+
+	while(1) {	
+		if (canSend) {
+			ESP_ERROR_CHECK(esp_now_send(peer.peer_addr, data, sizeof(data)));
+			canSend = false;
+		}
+		vTaskDelay(pdMS_TO_TICKS(5));  // Yield CPU
 	}
 }
+
 #endif
 
+/*
 #if RECEIVER
+
 #include <string.h>
+#include <stdio.h>
+#include <sys/time.h>   // For gettimeofday
 #include "esp_now.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -65,17 +96,35 @@ void app_main(void)
 
 static const char *TAG = "ESP-NOW Receiver";
 
-// Callback function when data is received
-void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-    char mac_str[18];
-    snprintf(mac_str, sizeof(mac_str),
-             "%02X:%02X:%02X:%02X:%02X:%02X",
-             recv_info->src_addr[0], recv_info->src_addr[1], recv_info->src_addr[2],
-             recv_info->src_addr[3], recv_info->src_addr[4], recv_info->src_addr[5]);
+static uint64_t total_bytes = 0;
+static struct timeval start_time;
+static bool timing_started = false;
 
-    ESP_LOGI(TAG, "Received data from %s: %.*s", mac_str, len, data);
+// Helper function to get elapsed time in seconds (float)
+static float elapsed_time_seconds() {
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    uint64_t elapsed_us = (now.tv_sec - start_time.tv_sec) * 1000000ULL + (now.tv_usec - start_time.tv_usec);
+    return elapsed_us / 1e6f;
 }
 
+// Callback function when data is received
+void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+    if (!timing_started) {
+        gettimeofday(&start_time, NULL);
+        timing_started = true;
+        total_bytes = 0;
+    }
+
+    total_bytes += len;
+
+    // Optional: print info about this packet
+    // char mac_str[18];
+    // snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+    //          recv_info->src_addr[0], recv_info->src_addr[1], recv_info->src_addr[2],
+    //          recv_info->src_addr[3], recv_info->src_addr[4], recv_info->src_addr[5]);
+    // ESP_LOGI(TAG, "Received %d bytes from %s", len, mac_str);
+}
 
 void app_main(void) {
     // Initialize NVS and Wi-Fi
@@ -94,8 +143,96 @@ void app_main(void) {
     // Register receive callback
     ESP_ERROR_CHECK(esp_now_register_recv_cb(espnow_recv_cb));
 
-    // No need to add a peer for receiving broadcast messages
     ESP_LOGI(TAG, "Ready to receive ESP-NOW data.");
+
+    // Periodically print throughput every 1 second
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (timing_started) {
+            float seconds = elapsed_time_seconds();
+            float kbps = (total_bytes * 8) / (seconds * 1000);  // kilobits per second
+            ESP_LOGI(TAG, "Received %llu bytes in %.2f seconds, Speed: %.2f kbps", total_bytes, seconds, kbps);
+        } else {
+            ESP_LOGI(TAG, "No data received yet...");
+        }
+    }
+}*/
+
+#if RECEIVER
+
+#include <string.h>
+#include <stdio.h>
+#include <sys/time.h>   // For gettimeofday
+#include "esp_now.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_netif.h"
+
+static const char *TAG = "ESP-NOW Receiver";
+
+static uint64_t total_bytes = 0;
+static struct timeval start_time;
+static bool timing_started = false;
+
+// Helper function to get elapsed time in seconds (float)
+static float elapsed_time_seconds() {
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    uint64_t elapsed_us = (now.tv_sec - start_time.tv_sec) * 1000000ULL + (now.tv_usec - start_time.tv_usec);
+    return elapsed_us / 1e6f;
+}
+
+// Callback function when data is received
+void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+    if (!timing_started) {
+        gettimeofday(&start_time, NULL);
+        timing_started = true;
+        total_bytes = 0;
+    }
+
+    total_bytes += len;
+
+    // Optional: print info about this packet
+    // char mac_str[18];
+    // snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+    //          recv_info->src_addr[0], recv_info->src_addr[1], recv_info->src_addr[2],
+    //          recv_info->src_addr[3], recv_info->src_addr[4], recv_info->src_addr[5]);
+    // ESP_LOGI(TAG, "Received %d bytes from %s", len, mac_str);
+}
+
+void app_main(void) {
+    // Initialize NVS and Wi-Fi
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Initialize ESP-NOW
+    ESP_ERROR_CHECK(esp_now_init());
+
+    // Register receive callback
+    ESP_ERROR_CHECK(esp_now_register_recv_cb(espnow_recv_cb));
+
+    ESP_LOGI(TAG, "Ready to receive ESP-NOW data.");
+
+    // Periodically print throughput every 1 second
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (timing_started) {
+            float seconds = elapsed_time_seconds();
+            float kbps = (total_bytes * 8) / (seconds * 1000);  // kilobits per second
+            ESP_LOGI(TAG, "Received %llu bytes in %.2f seconds, Speed: %.2f kbps", total_bytes, seconds, kbps);
+        } else {
+            ESP_LOGI(TAG, "No data received yet...");
+        }
+    }
 }
 
 #endif
+
