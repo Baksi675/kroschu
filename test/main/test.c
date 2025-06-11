@@ -22,6 +22,8 @@ void app_main(void)
 
 void InitLed(void) {
 	gpio_set_direction(GPIO_NUM_2,  GPIO_MODE_OUTPUT);
+
+	for(uint32_t i = 0; i < 20000; i++);
 }
 
 void LedRun(void) {
