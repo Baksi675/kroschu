@@ -13,7 +13,7 @@
 */
 void app_main(void)
 {
-	stats_start();
+	//stats_start();
 	sta_init();
 }
 

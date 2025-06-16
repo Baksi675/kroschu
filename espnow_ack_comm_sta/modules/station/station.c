@@ -1,3 +1,5 @@
+// MAC: 34:98:7A:B6:EB:48
+
 /*******************************BEGIN: PURPOSE OF MODULE*******************************/
 
 /*******************************END: PURPOSE OF MODULE*******************************/
@@ -26,31 +28,31 @@ typedef struct {
 	uint8_t mac_addr[6];
 }PEER_t;
 
+typedef struct {
+	int len;
+	uint8_t data[ESP_NOW_MAX_DATA_LEN_V2];
+}RECEIVE_DATA_t;
+
 #define TAG "STATION"
 #define STA_COMMUNICATION_TASK_PRIO 5
 /*******************************END: GSTRUCTS, ENUMS, UNIONS, DEFINES*******************************/
 
 /*******************************BEGIN: GLOBAL VARIABLES PRIVATE TO MODULE*******************************/
+uint8_t cmd[] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t ack[] = {0xEE, 0xEE, 0xEE, 0xEE};
+uint8_t data[ESP_NOW_MAX_DATA_LEN_V2];
 
 PEER_t peers[] = {
 	{.mac_addr = {0x54, 0x32, 0x04, 0x07, 0x41, 0xF4}}			// Add peer MAC addresses here
 };
 
-uint8_t data[ESP_NOW_MAX_DATA_LEN_V2];
+/*PEER_t peers[] = {
+	{.mac_addr = {0x5C, 0x01, 0x3B, 0x69, 0xFB, 0x70}}			// Add peer MAC addresses here
+};*/
 
-bool cmd_recv;
-bool ack_sent;
-bool data_sent;
 
-SemaphoreHandle_t semaph_cmd_recv;
-SemaphoreHandle_t semaph_ack_sent;
-SemaphoreHandle_t semaph_data_sent;
-
-#define SEMAPH_CMD_RECV_MS	pdMS_TO_TICKS(5)
-#define SEMAPH_ACK_SENT_MS	pdMS_TO_TICKS(5)
-#define SEMAPH_DATA_SENT_MS	pdMS_TO_TICKS(5)
-
+QueueHandle_t send_cb_msg_queue;
+QueueHandle_t recv_cb_msg_queue;
 
 /*******************************END: GLOBAL VARIABLES PRIVATE TO MODULE*******************************/
 
@@ -60,6 +62,7 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 static void sta_connect_peer(PEER_t g_peer);
 static void sta_init_tasks(void);
 static void sta_communication_task(void *arg);
+static void print_mac_addr(void);
 /*******************************END: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 
 /*******************************BEGIN: APIs EXPOSED BY THIS MODULE*******************************/
@@ -95,9 +98,10 @@ static void sta_communication_task(void *arg);
 	ESP_ERROR_CHECK(esp_now_register_send_cb(sta_espnow_send_cb));
 	ESP_ERROR_CHECK(esp_now_register_recv_cb(sta_espnow_recv_cb));
 
-	semaph_cmd_recv = xSemaphoreCreateBinary();
-	semaph_ack_sent = xSemaphoreCreateBinary();
-	semaph_data_sent = xSemaphoreCreateBinary();
+	send_cb_msg_queue = xQueueCreate(1, sizeof(esp_now_send_status_t));
+	recv_cb_msg_queue = xQueueCreate(1, sizeof(RECEIVE_DATA_t));
+
+	print_mac_addr();
 
 	memset(data, 'A', sizeof(data));
 
@@ -140,28 +144,7 @@ static void sta_communication_task(void *arg);
  * @note	- 
  *****************************************************************************/
  static void sta_espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
-	bool is_ack = true;
-
-	// Set ack_sent to true
-	for (int i = 0; i < sizeof(ack); i++) {
-		if (tx_info->data[i] != ack[i]) {
-			is_ack = false;
-			break;
-		}
-	}
-
-	if(is_ack) {
-		ESP_LOGI(TAG, "ACK sent");
-		xSemaphoreTake(semaph_ack_sent, SEMAPH_ACK_SENT_MS);
-		ack_sent = true;
-		xSemaphoreGive(semaph_ack_sent);
-	}
-	/*else {
-		xSemaphoreTake(semaph_data_sent, SEMAPH_DATA_SENT_MS);
-		data_sent = true;
-		xSemaphoreGive(semaph_data_sent);
-	}*/
-
+	xQueueSend(send_cb_msg_queue, &status, pdMS_TO_TICKS(5));
  }
 
  /*******************************FUNCTION INFORMATION*******************************
@@ -178,23 +161,17 @@ static void sta_communication_task(void *arg);
  * @note	- 
  *****************************************************************************/
 static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-	bool is_cmd = false;
-	
-	// Checking if message is CMD
-	for(uint16_t i = 0; i < len; i++) {
-		if(data[i] != 0xFF) {
-			break;
-		}
-		is_cmd = true;
-	}
+	RECEIVE_DATA_t recv_data;
 
-	// Message is CMD
-	if(is_cmd) {
-		ESP_LOGI(TAG, "CMD received");
-		xSemaphoreTake(semaph_cmd_recv, SEMAPH_CMD_RECV_MS);
-		cmd_recv = true;
-		xSemaphoreGive(semaph_cmd_recv);
+	if(len > ESP_NOW_MAX_DATA_LEN_V2) {
+		len = ESP_NOW_MAX_DATA_LEN_V2;
 	}
+	
+	recv_data.len = len;
+
+	memcpy(recv_data.data, data, len);
+
+	xQueueSend(recv_cb_msg_queue, &recv_data, pdMS_TO_TICKS(5));
 }
 
 /*******************************FUNCTION INFORMATION*******************************
@@ -255,46 +232,83 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 
 	sta_connect_peer(*peer);
 
-	xSemaphoreTake(semaph_cmd_recv, SEMAPH_CMD_RECV_MS);
-	cmd_recv = false;
-	xSemaphoreGive(semaph_cmd_recv);
+	esp_now_send_status_t msg_from_send_cb;
 
-	xSemaphoreTake(semaph_ack_sent, SEMAPH_ACK_SENT_MS);
-	ack_sent = false;
-	xSemaphoreGive(semaph_ack_sent);
+	RECEIVE_DATA_t data_from_recv_cb;
 
-	xSemaphoreTake(semaph_data_sent, SEMAPH_DATA_SENT_MS);
-	data_sent = false;
-	xSemaphoreGive(semaph_data_sent);
+	bool cmd_recv;
+	bool ack_sent;
+	bool data_sent;
+
 	while(1) {
-		// Send ACK if CMD received
-		xSemaphoreTake(semaph_cmd_recv, SEMAPH_CMD_RECV_MS);
+		// Receive CMD
+		cmd_recv = false;
+		ack_sent = false;
+		data_sent = false;
+		if (xQueueReceive(recv_cb_msg_queue, &data_from_recv_cb, pdMS_TO_TICKS(100)) == pdTRUE) {
+			if (data_from_recv_cb.len == sizeof(cmd)) {
+				cmd_recv = true;
+				for (uint16_t i = 0; i < sizeof(cmd); i++) {
+					if (data_from_recv_cb.data[i] != cmd[i]) {
+						cmd_recv = false;
+						break;
+					}
+				}
+			}
+		}
+
+		// temporary
 		if(cmd_recv) {
-			cmd_recv = false;
+			ESP_LOGI(TAG, "CMD received");
+		}
+		else {
+			ESP_LOGI(TAG, "CMD receive failed");
+		}
+
+		// Send ACK
+		if(cmd_recv) {
 			ESP_ERROR_CHECK(esp_now_send(peer->mac_addr, ack, sizeof(ack)));
+			if(xQueueReceive(send_cb_msg_queue, &msg_from_send_cb, pdMS_TO_TICKS(100)) == pdTRUE) {
+				if(msg_from_send_cb == ESP_NOW_SEND_SUCCESS) {
+					ack_sent = true;
+					ESP_LOGI(TAG, "ACK sent successfully.");
+				}
+			}
+			else {
+				ESP_LOGI(TAG, "ACK send failed.");
+			}
 		}
-		xSemaphoreGive(semaph_cmd_recv);
 
-		// Send data after ACK sent
-		xSemaphoreTake(semaph_ack_sent, SEMAPH_ACK_SENT_MS);
+		// If ACK has been sent, send data
 		if(ack_sent) {
-			ack_sent = false;
-			ESP_ERROR_CHECK(esp_now_send(peer->mac_addr, data, sizeof(data)));
-			data_sent = true;
+			esp_now_send(peer->mac_addr, data, sizeof(data));
+			if(xQueueReceive(send_cb_msg_queue, &msg_from_send_cb, pdMS_TO_TICKS(100)) == pdTRUE) {
+				if(msg_from_send_cb == ESP_NOW_SEND_SUCCESS) {
+					data_sent = true;
+					ESP_LOGI(TAG, "Data sent successfully.");
+				}
+			}
+			else {
+				ESP_LOGI(TAG, "Data send failed");
+			}
 		}
-		xSemaphoreGive(semaph_ack_sent);
 
-		// If data has been send, delete task
-		xSemaphoreTake(semaph_data_sent, SEMAPH_DATA_SENT_MS);
-		if(data_sent) {
-			ESP_LOGI(TAG, "delete");
+		// If data has been sent, delete task
+		/*if(data_sent) {
+			ESP_LOGI(TAG, "Deleting task.");
 			vTaskDelete(NULL);
-		}
-		xSemaphoreGive(semaph_data_sent);
+		}*/
+
 
 		// Delay to yield CPU
-		vTaskDelay(pdMS_TO_TICKS(1000));
+		vTaskDelay(pdMS_TO_TICKS(1));
 	}
  }
 
+ static void print_mac_addr(void) {
+    uint8_t mac[6];
+    ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, mac));
+    ESP_LOGI("MAC_ADDRESS", "MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
  /*******************************END: HELPER FUNCTION DEFINITIONS*******************************/

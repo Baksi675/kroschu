@@ -15,7 +15,7 @@
 */
 void app_main(void)
 {
-	stats_run();
+	//stats_run();
 	hub_init();
 }
 
