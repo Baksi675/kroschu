@@ -15,6 +15,6 @@
 #define STATS_TICKS         pdMS_TO_TICKS(1000)
 #define ARRAY_SIZE_OFFSET   5   //Increase this if print_real_time_stats returns ESP_ERR_INVALID_SIZE
 
-void stats_start(void);
+void stats_run(void);
 
 #endif

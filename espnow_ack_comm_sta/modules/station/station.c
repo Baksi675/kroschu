@@ -1,10 +1,6 @@
-// MAC: 34:98:7A:B6:EB:48
-
-/*******************************BEGIN: PURPOSE OF MODULE*******************************/
-
-/*******************************END: PURPOSE OF MODULE*******************************/
-
-
+/*******************************BEGIN: PURPOSE OF MODULE*******************************
+* This module implements an ESP32 STATION that serves as a slave node in an ESP-NOW network 
+*******************************END: PURPOSE OF MODULE*******************************/
 
 /*******************************BEGIN: MODULE HEADER FILE INCLUDE*******************************/
 #include "station.h"
@@ -24,6 +20,8 @@
 /*******************************END: MODULE HEADER FILE INCLUDE*******************************/
 
 /*******************************BEGIN: STRUCTS, ENUMS, UNIONS, DEFINES*******************************/
+#define DEBUG_LOG 0
+
 typedef struct {
 	uint8_t mac_addr[6];
 }PEER_t;
@@ -40,14 +38,14 @@ typedef struct {
 /*******************************BEGIN: GLOBAL VARIABLES PRIVATE TO MODULE*******************************/
 uint8_t cmd[] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t ack[] = {0xEE, 0xEE, 0xEE, 0xEE};
-uint8_t data[ESP_NOW_MAX_DATA_LEN_V2];
+uint8_t data[100];
 
 PEER_t peers[] = {
 	{.mac_addr = {0x54, 0x32, 0x04, 0x07, 0x41, 0xF4}}			// Add peer MAC addresses here
 };
 
 /*PEER_t peers[] = {
-	{.mac_addr = {0x5C, 0x01, 0x3B, 0x69, 0xFB, 0x70}}			// Add peer MAC addresses here
+	{.mac_addr = {0x5C, 0x01, 0x3B, 0x69, 0xFB, 0x70}}			
 };*/
 
 
@@ -62,23 +60,25 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 static void sta_connect_peer(PEER_t g_peer);
 static void sta_init_tasks(void);
 static void sta_communication_task(void *arg);
-static void print_mac_addr(void);
+static void sta_print_mac_addr(void);
 /*******************************END: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 
 /*******************************BEGIN: APIs EXPOSED BY THIS MODULE*******************************/
 
 /*******************************API INFORMATION*******************************
- * @fn		- 
+ * @fn			- 
  * 
- * @brief	- 
+ * @brief		- Initializes the communications (Wi-Fi, ESP-NOW), creates 
+ *				  semaphores and starts the necessary tasks. Initializes the data
+ *				  to be sent later.
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- none
  *****************************************************************************/
  void sta_init(void) {
 	ESP_ERROR_CHECK(nvs_flash_init());										
@@ -101,7 +101,7 @@ static void print_mac_addr(void);
 	send_cb_msg_queue = xQueueCreate(1, sizeof(esp_now_send_status_t));
 	recv_cb_msg_queue = xQueueCreate(1, sizeof(RECEIVE_DATA_t));
 
-	print_mac_addr();
+	sta_print_mac_addr();
 
 	memset(data, 'A', sizeof(data));
 
@@ -109,17 +109,17 @@ static void print_mac_addr(void);
  }
 
  /*******************************API INFORMATION*******************************
- * @fn		- 
+ * @fn			- sta_run();
  * 
- * @brief	- 
+ * @brief		- 
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- Yet to be implemented if needed.
  *****************************************************************************/
  void sta_run(void) {
 
@@ -131,34 +131,35 @@ static void print_mac_addr(void);
 /*******************************BEGIN: HELPER FUNCTION DEFINITIONS*******************************/
 
 /*******************************FUNCTION INFORMATION*******************************
- * @fn		- 
+ * @fn			- sta_espnow_send_cb()
  * 
- * @brief	- 
+ * @brief		- Passes the result of a send (success or fail) to a communication
+ *				  channel (queue).
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- Information about the sender and the receiver, and message
+ * @param[in]	- Data sent successfully or not
+ * @param[in]	- none
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- Gets called automatically when the message is sent.
  *****************************************************************************/
  static void sta_espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
 	xQueueSend(send_cb_msg_queue, &status, pdMS_TO_TICKS(5));
  }
 
  /*******************************FUNCTION INFORMATION*******************************
- * @fn		- 
+ * @fn			- sta_espnow_recv_cb()
  * 
- * @brief	- 
+ * @brief		- Passes the data and its length to a queue.
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- Information about the message
+ * @param[in]	- The received data
+ * @param[in]	- The length of the received data
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- Gets called automatically when a message arrives
  *****************************************************************************/
 static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
 	RECEIVE_DATA_t recv_data;
@@ -175,17 +176,17 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 }
 
 /*******************************FUNCTION INFORMATION*******************************
- * @fn		- 
+ * @fn			- sta_connect_peer()
  * 
- * @brief	- 
+ * @brief		- Initializes the peer, adds it to the peer list.
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- The peer object
+ * @param[in]	- none
+ * @param[in]	- none
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- none
  *****************************************************************************/
  static void sta_connect_peer(PEER_t g_peer) {
 	esp_now_peer_info_t peer = {		
@@ -198,34 +199,34 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
  }
 
 /*******************************FUNCTION INFORMATION*******************************
- * @fn		- 
+ * @fn			- sta_init_tasks()
  * 
- * @brief	- 
+ * @brief		- Initializes and starts the tasks.
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- none
  *****************************************************************************/
  static void sta_init_tasks(void) {
 	xTaskCreatePinnedToCore(sta_communication_task, "Station task", 4096, (void*)&peers[0], STA_COMMUNICATION_TASK_PRIO, NULL, tskNO_AFFINITY);
  }
 
  /*******************************FUNCTION INFORMATION*******************************
- * @fn		- 
+ * @fn			- sta_communication_task()
  * 
- * @brief	- 
+ * @brief		- The task that is repsonsible for the communication with the HUB
  * 
- * @param[in]	- 
- * @param[in]	- 
- * @param[in]	- 
+ * @param[in]	- A pointer to the HUB object
+ * @param[in]	- none
+ * @param[in]	- none
  * 
- * @return	- 
+ * @return		- none
  * 
- * @note	- 
+ * @note		- none
  *****************************************************************************/
  static void sta_communication_task(void *arg) {
 	PEER_t *peer = (PEER_t*)arg;
@@ -241,10 +242,11 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 	bool data_sent;
 
 	while(1) {
-		// Receive CMD
 		cmd_recv = false;
 		ack_sent = false;
 		data_sent = false;
+
+		// Receive CMD
 		if (xQueueReceive(recv_cb_msg_queue, &data_from_recv_cb, pdMS_TO_TICKS(100)) == pdTRUE) {
 			if (data_from_recv_cb.len == sizeof(cmd)) {
 				cmd_recv = true;
@@ -257,13 +259,14 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 			}
 		}
 
-		// temporary
+#if DEBUG_LOG
 		if(cmd_recv) {
 			ESP_LOGI(TAG, "CMD received");
 		}
 		else {
 			ESP_LOGI(TAG, "CMD receive failed");
 		}
+#endif
 
 		// Send ACK
 		if(cmd_recv) {
@@ -271,12 +274,16 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 			if(xQueueReceive(send_cb_msg_queue, &msg_from_send_cb, pdMS_TO_TICKS(100)) == pdTRUE) {
 				if(msg_from_send_cb == ESP_NOW_SEND_SUCCESS) {
 					ack_sent = true;
+#if DEBUG_LOG
 					ESP_LOGI(TAG, "ACK sent successfully.");
+#endif
 				}
 			}
+#if DEBUG_LOG
 			else {
 				ESP_LOGI(TAG, "ACK send failed.");
 			}
+#endif
 		}
 
 		// If ACK has been sent, send data
@@ -285,27 +292,45 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 			if(xQueueReceive(send_cb_msg_queue, &msg_from_send_cb, pdMS_TO_TICKS(100)) == pdTRUE) {
 				if(msg_from_send_cb == ESP_NOW_SEND_SUCCESS) {
 					data_sent = true;
+#if DEBUG_LOG
 					ESP_LOGI(TAG, "Data sent successfully.");
+#endif
 				}
 			}
+#if DEBUG_LOG
 			else {
 				ESP_LOGI(TAG, "Data send failed");
 			}
+#endif
 		}
 
 		// If data has been sent, delete task
 		/*if(data_sent) {
+#if DEBUG_LOG
 			ESP_LOGI(TAG, "Deleting task.");
+#endif
 			vTaskDelete(NULL);
 		}*/
-
 
 		// Delay to yield CPU
 		vTaskDelay(pdMS_TO_TICKS(1));
 	}
  }
 
- static void print_mac_addr(void) {
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- sta_print_mac_addr()
+ * 
+ * @brief		- Prints the MAC address of the device on boot
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
+ static void sta_print_mac_addr(void) {
     uint8_t mac[6];
     ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, mac));
     ESP_LOGI("MAC_ADDRESS", "MAC: %02X:%02X:%02X:%02X:%02X:%02X", 

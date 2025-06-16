@@ -122,6 +122,6 @@ void stats_task(void *arg)
     }
 }
 
-void stats_start(void) {
+void stats_run(void) {
 	xTaskCreatePinnedToCore(stats_task, "Stats task", 4096, NULL, STATS_TASK_PRIO, NULL, tskNO_AFFINITY);
 }
