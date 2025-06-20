@@ -1,5 +1,19 @@
+#include "sdkconfig.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "esp_err.h"
 #include "stats.h"
+#include "freertos/idf_additions.h"
 
+#define STATS_TASK_PRIO     3
+#define STATS_TICKS         pdMS_TO_TICKS(1000)
+#define ARRAY_SIZE_OFFSET   5   //Increase this if print_real_time_stats returns ESP_ERR_INVALID_SIZE
+
+TaskHandle_t handle_stats_task;
 
 /**
  * @brief   Function to print the CPU usage of tasks over a given duration.
@@ -122,6 +136,10 @@ void stats_task(void *arg)
     }
 }
 
-void stats_run(void) {
-	xTaskCreatePinnedToCore(stats_task, "Stats task", 4096, NULL, STATS_TASK_PRIO, NULL, tskNO_AFFINITY);
+void stats_spawn_task(void) {
+	xTaskCreatePinnedToCore(stats_task, "Stats task", 4096, NULL, STATS_TASK_PRIO, &handle_stats_task, tskNO_AFFINITY);
+}
+
+void stats_delete_task(void) {
+	vTaskDelete(handle_stats_task);
 }

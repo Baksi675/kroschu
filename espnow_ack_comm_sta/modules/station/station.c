@@ -20,7 +20,7 @@
 /*******************************END: MODULE HEADER FILE INCLUDE*******************************/
 
 /*******************************BEGIN: STRUCTS, ENUMS, UNIONS, DEFINES*******************************/
-#define DEBUG_LOG 0
+#define DEBUG_LOG 1
 
 typedef struct {
 	uint8_t mac_addr[6];
@@ -38,14 +38,14 @@ typedef struct {
 /*******************************BEGIN: GLOBAL VARIABLES PRIVATE TO MODULE*******************************/
 uint8_t cmd[] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t ack[] = {0xEE, 0xEE, 0xEE, 0xEE};
-uint8_t data[100];
+uint8_t data[128];
 
 PEER_t peers[] = {
 	{.mac_addr = {0x54, 0x32, 0x04, 0x07, 0x41, 0xF4}}			// Add peer MAC addresses here
 };
 
 /*PEER_t peers[] = {
-	{.mac_addr = {0x5C, 0x01, 0x3B, 0x69, 0xFB, 0x70}}			
+	{.mac_addr = {0xEC, 0xE3, 0x34, 0x47, 0x66, 0x3C}}			
 };*/
 
 
@@ -92,6 +92,7 @@ static void sta_print_mac_addr(void);
 	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));	
 	ESP_ERROR_CHECK(esp_wifi_start());
 	ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+	ESP_ERROR_CHECK(esp_wifi_set_channel(6,  WIFI_SECOND_CHAN_NONE));
 
 	ESP_ERROR_CHECK(esp_now_init());
 
@@ -144,9 +145,17 @@ static void sta_print_mac_addr(void);
  * 
  * @note		- Gets called automatically when the message is sent.
  *****************************************************************************/
- static void sta_espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
-	xQueueSend(send_cb_msg_queue, &status, pdMS_TO_TICKS(5));
- }
+static void sta_espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    
+    // Safe ISR version of queue send
+    xQueueSendFromISR(send_cb_msg_queue, &status, &xHigherPriorityTaskWoken);
+    
+    // Yield if needed
+    if(xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
 
  /*******************************FUNCTION INFORMATION*******************************
  * @fn			- sta_espnow_recv_cb()
@@ -163,6 +172,7 @@ static void sta_print_mac_addr(void);
  *****************************************************************************/
 static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
 	RECEIVE_DATA_t recv_data;
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
 	if(len > ESP_NOW_MAX_DATA_LEN_V2) {
 		len = ESP_NOW_MAX_DATA_LEN_V2;
@@ -172,7 +182,11 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
 
 	memcpy(recv_data.data, data, len);
 
-	xQueueSend(recv_cb_msg_queue, &recv_data, pdMS_TO_TICKS(5));
+    xQueueSendFromISR(recv_cb_msg_queue, &recv_data, &xHigherPriorityTaskWoken);
+
+	if(xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
 }
 
 /*******************************FUNCTION INFORMATION*******************************
@@ -190,7 +204,7 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
  *****************************************************************************/
  static void sta_connect_peer(PEER_t g_peer) {
 	esp_now_peer_info_t peer = {		
-		.channel = 0,					
+		.channel = 6,					
 		.ifidx = ESP_IF_WIFI_STA,		
 		.encrypt = false
 	};

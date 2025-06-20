@@ -1,0 +1,11 @@
+menu "Stats Configuration"
+
+config MY_ENABLE_RTOS_STATS
+    bool "Enable FreeRTOS runtime stats using esp_timer"
+    default n
+    help
+        When enabled, activates FreeRTOS run-time stats using esp_timer.
+    select FREERTOS_GENERATE_RUN_TIME_STATS
+    select FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER
+
+endmenu

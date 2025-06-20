@@ -1,11 +1,10 @@
-#include "freertos/idf_additions.h"
 #include "hub.h"
-#include "stats.h"
+#include "cconsole.h"
 
 void app_main(void)
 {
-	//stats_run();
 	hub_init();
+	cconsole_init();
 }
 
 
