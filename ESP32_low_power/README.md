@@ -5,10 +5,18 @@ This repository provides two standalone examples for measuring power consumption
 ## Repository Structure
 
 ```text
-├── sender_sleep/       # Example: deep-sleep after send
-│   └── main.c          # Sends data then sleeps
-└── peer/           # Example: continuous receive
-    └── main.c          # Logs incoming data
+├── sender_sleep/        # Sender example
+│   ├── CMakeLists.txt
+│   ├── README.md
+│   └── main/            # Application source directory
+│       ├── CMakeLists.txt
+│       └── main.c       # Sends data then sleeps
+└── peer/                # Receiver example
+    ├── CMakeLists.txt
+    ├── README.md
+    └── main/            # Application source directory
+        ├── CMakeLists.txt
+        └── main.c       # Logs incoming data
 ```
 <br>
 
