@@ -7,7 +7,7 @@ This repository provides two standalone examples for measuring power consumption
 ```text
 ├── sender_sleep/       # Example: deep-sleep after send
 │   └── main.c          # Sends data then sleeps
-└── peerr/           # Example: continuous receive
+└── peer/           # Example: continuous receive
     └── main.c          # Logs incoming data
 ```
 <br>
