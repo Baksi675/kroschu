@@ -178,7 +178,8 @@ STA → DATA (128 B)
 * **Throughput**:
 
   * Raw Wi-Fi limits apply (802.11n)
-  * Few Mbps typical in small networks
+  * Few Mbps throughput in small networks
+  * Observed throughput: 400kbps
   * Drops sharply with more hops
 * **Range**:
 
