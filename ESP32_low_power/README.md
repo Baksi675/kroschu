@@ -30,8 +30,8 @@ This repository provides two standalone examples for measuring power consumption
 | • CPU @ 160 MHz          | \~30 mA      |                                                                                              |
 | • CPU @ 120 MHz          | \~28 mA      |                                                                                              |
 | • CPU @  80 MHz          | \~24 mA      |                                                                                              |
-| **ESP-NOW Active**       | \~100 mA     | Wi-Fi/ESP-NOW idle                                                                           |
-| **ESP-NOW Transmission** | \~220 mA     | During packet TX                                                                             |
+| **Wi-Fi/ESP-NOW Active**       | \~100 mA     | Wi-Fi/ESP-NOW idle                                                                     |
+| **Wi-Fi/ESP-NOW Transmission** | \~220 mA     | During packet TX                                                                       |
 | **Modem-sleep**          | \~80–100 mA  | `esp_wifi_set_ps(WIFI_PS_MIN_MODEM)` → CPU, RAM, peripherals active                          |
 | **Light-sleep**          | \~1 mA       | `esp_light_sleep_start()` → CPU, RAM, peripherals clock-gated, state retained                |
 | **Deep-sleep**           | \~10 µA      | `esp_deep_sleep_start()` → CPU, RAM off; RTC controller, ULP, RTC FAST memory remain powered |
