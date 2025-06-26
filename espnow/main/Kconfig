@@ -1,0 +1,13 @@
+choice
+    prompt "Select Hub / Station Mode"
+    help
+      Choose one of the available modes.
+
+config HUB_MODE
+    bool "Hub Mode"
+
+config STATION_MODE
+    bool "Station Mode"
+
+endchoice
+

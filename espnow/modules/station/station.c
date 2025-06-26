@@ -17,13 +17,15 @@
 #include "esp_now.h"			// Required for ESP-NOW
 #include"esp_log.h"
 #include <string.h>
+#include "sdkconfig.h"
 /*******************************END: MODULE HEADER FILE INCLUDE*******************************/
 
 /*******************************BEGIN: STRUCTS, ENUMS, UNIONS, DEFINES*******************************/
-#define DEBUG_LOG 1
+#define DEBUG_LOG CONFIG_DEBUG_LOG
 #define TAG "STATION"
 
 #define STA_COMMUNICATION_TASK_PRIO 5
+#define PEER_ARR_SIZE 1
 
 typedef struct {
 	uint8_t mac_addr[6];
@@ -45,9 +47,11 @@ uint8_t cmd[] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t ack[] = {0xEE, 0xEE, 0xEE, 0xEE};
 uint8_t data[128];
 
-PEER_t peers[] = {
-	{.mac_addr = {0x54, 0x32, 0x04, 0x07, 0x41, 0xF4}}			// Add peer MAC addresses here
+static const char *mac_str_arr[1] = {
+	CONFIG_MASTER
 };
+
+static PEER_t peer_arr[PEER_ARR_SIZE];
 
 struct s_queue_handlers queue_handlers;
 /*******************************END: GLOBAL VARIABLES PRIVATE TO MODULE*******************************/
@@ -59,6 +63,7 @@ static void sta_connect_peer(PEER_t g_peer);
 static void sta_init_tasks(void);
 static void sta_communication_task(void *arg);
 static void sta_print_mac_addr(void);
+static void hub_peer_arr_init(void);
 /*******************************END: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 
 /*******************************BEGIN: APIs EXPOSED BY THIS MODULE*******************************/
@@ -103,6 +108,8 @@ static void sta_print_mac_addr(void);
 	sta_print_mac_addr();
 
 	memset(data, 'A', sizeof(data));
+
+	hub_peer_arr_init();
 
 	sta_init_tasks();
  }
@@ -206,7 +213,7 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
  * @note		- none
  *****************************************************************************/
  static void sta_init_tasks(void) {
-	xTaskCreatePinnedToCore(sta_communication_task, "StaTask", 4096, (void*)&peers[0], STA_COMMUNICATION_TASK_PRIO, NULL, tskNO_AFFINITY);
+	xTaskCreatePinnedToCore(sta_communication_task, "StaTask", 4096, (void*)&peer_arr[0], STA_COMMUNICATION_TASK_PRIO, NULL, tskNO_AFFINITY);
  }
 
  /*******************************FUNCTION INFORMATION*******************************
@@ -329,5 +336,32 @@ static void sta_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
     ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, mac));
     ESP_LOGI("MAC_ADDRESS", "MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- hub_peer_arr_init()
+ * 
+ * @brief		- Parses the MAC addresses from menuconfig to uint8_t type
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
+static void hub_peer_arr_init(void) {
+	for (int i = 0; i < PEER_ARR_SIZE; i++) {
+		int b[6];
+		if (sscanf(mac_str_arr[i], "%x:%x:%x:%x:%x:%x",
+				&b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) == 6) {
+			for (int j = 0; j < 6; j++) {
+				peer_arr[i].mac_addr[j] = (uint8_t)b[j];
+			}
+		} else {
+			ESP_LOGE(TAG, "Invalid MAC address format at index %d", i);
+		}
+	}
 }
  /*******************************END: HELPER FUNCTION DEFINITIONS*******************************/

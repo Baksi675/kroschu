@@ -1,8 +1,7 @@
 /*******************************BEGIN: PURPOSE OF MODULE*******************************
-
+* This module implements a console system, that can be used for debugging, monitoring and
+* run-time communication with the device.
 *******************************END: PURPOSE OF MODULE*******************************/
-
-
 
 /*******************************BEGIN: MODULE HEADER FILE INCLUDE*******************************/
 #include <stdio.h>
@@ -17,6 +16,8 @@
 #include "argtable3/argtable3.h"
 #include "hub.h"
 #include "stats.h"
+#include "cconsole.h"
+#include "sdkconfig.h"
 /*******************************END: MODULE HEADER FILE INCLUDE*******************************/
 
 /*******************************BEGIN: SETTINGS*******************************/
@@ -49,21 +50,19 @@ static void *argtable[] = {
 
 /*******************************BEGIN: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 static void initialize_nvs(void);
-int send_cmd_to_sta(int argc, char **argv);
-static void register_mac_command(void);
+static int start_sendcmd(int argc, char **argv);
+static void register_sendcmd_command(void);
 static void register_measurement_command(void);
 static int start_measurement(int argc, char **argv);
 static void register_stats_command(void);
 /*******************************END: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 
-
-
 /*******************************BEGIN: APIs EXPOSED BY THIS MODULE*******************************/
 
 /*******************************API INFORMATION*******************************
- * @fn			- 
+ * @fn			- cconsole_init()
  * 
- * @brief		- 
+ * @brief		- Initializes the console, registers commands
  * 
  * @param[in]	- none
  * @param[in]	- none
@@ -73,7 +72,7 @@ static void register_stats_command(void);
  * 
  * @note		- none
  *****************************************************************************/
- void cconsole_init(void)
+void cconsole_init(enum e_device_mode device_mode)
 {
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
@@ -92,10 +91,19 @@ static void register_stats_command(void);
 #endif
 
     /* Register commands */
-	register_mac_command();
-    esp_console_register_help_command();
-	register_measurement_command();
-	register_stats_command();
+
+	if(device_mode == MODE_HUB) {
+		register_sendcmd_command();
+		esp_console_register_help_command();
+		register_measurement_command();
+		register_stats_command();
+	}
+	else {
+		// MODE_STA
+		esp_console_register_help_command();
+		register_stats_command();
+	}
+
 
 #if defined(CONFIG_ESP_CONSOLE_UART_DEFAULT) || defined(CONFIG_ESP_CONSOLE_UART_CUSTOM)
     esp_console_dev_uart_config_t hw_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
@@ -121,6 +129,19 @@ static void register_stats_command(void);
  
 /*******************************BEGIN: HELPER FUNCTION DEFINITIONS*******************************/
 
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- initialize_nvs()
+ * 
+ * @brief		- Initializes the Non-Volatile Storage.
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
 static void initialize_nvs(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -131,7 +152,21 @@ static void initialize_nvs(void)
     ESP_ERROR_CHECK(err);
 }
 
-int send_cmd_to_sta(int argc, char **argv)
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- initialize_nvs()
+ * 
+ * @brief		- Gets called on a sendcmd command. Handles the arguments of the
+ *				  command and calls the necessary APIs exposed by the hub module. 
+ * 
+ * @param[in]	- Arguments
+ * @param[in]	- Arguments
+ * @param[in]	- none
+ * 
+ * @return		- Successful or not.
+ * 
+ * @note		- none
+ *****************************************************************************/
+static int start_sendcmd(int argc, char **argv)
 {
     int nerrors = arg_parse(argc, argv, argtable);
     if (nerrors != 0) {
@@ -183,8 +218,20 @@ int send_cmd_to_sta(int argc, char **argv)
     return 0;
 }
 
-
-
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- start_measurement()
+ * 
+ * @brief		- Gets called on a measurement command. Handles the arguments of the
+ *				  command and calls the necessary APIs exposed by the hub module. 
+ * 
+ * @param[in]	- Arguments
+ * @param[in]	- Arguments
+ * @param[in]	- none
+ * 
+ * @return		- Successful or not.
+ * 
+ * @note		- none
+ *****************************************************************************/
 static int start_measurement(int argc, char **argv) {
     static struct {
         struct arg_str *action;
@@ -216,6 +263,21 @@ static int start_measurement(int argc, char **argv) {
     return 0;
 }
 
+
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- start_stats()
+ * 
+ * @brief		- Gets called on a stats command. Handles the arguments of the
+ *				  command and calls the necessary APIs exposed by the stats module. 
+ * 
+ * @param[in]	- Arguments
+ * @param[in]	- Arguments
+ * @param[in]	- none
+ * 
+ * @return		- Successful or not.
+ * 
+ * @note		- none
+ *****************************************************************************/
 static int start_stats(int argc, char **argv) {
     static struct {
         struct arg_str *action;
@@ -247,8 +309,21 @@ static int start_stats(int argc, char **argv) {
     return 0;
 }
 
-
-static void register_mac_command(void)
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- register_sendcmd_command()
+ * 
+ * @brief		- Registers a command for sending out a communication request to
+ *				  a peer.
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
+static void register_sendcmd_command(void)
 {
     args.mac  = arg_str0(NULL, "mac", "<MAC>", "Target MAC address (e.g., AA:BB:CC:DD:EE:FF)");
     args.all  = arg_lit0(NULL, "all", "Send to all known peers");
@@ -264,14 +339,27 @@ static void register_mac_command(void)
         .command = "sendcmd",
         .help = "Sends a command to initiate communication.",
         .hint = NULL,
-        .func = &send_cmd_to_sta,
+        .func = &start_sendcmd,
         .argtable = argtable
     };
 
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
 
-
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- register_measurement_command()
+ * 
+ * @brief		- Registers a command for measuring the speed, latency and number
+ *				  of packets in a communication cycle.
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
 static void register_measurement_command(void) {
     static struct {
         struct arg_str *action;
@@ -292,6 +380,20 @@ static void register_measurement_command(void) {
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
 
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- register_stats_command()
+ * 
+ * @brief		- Registers a command for monitoring RTOS tasks 
+ *				  in the system.
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
 static void register_stats_command(void) {
     static struct {
         struct arg_str *action;
@@ -311,7 +413,5 @@ static void register_stats_command(void) {
 
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
-
-
 
  /*******************************END: HELPER FUNCTION DEFINITIONS*******************************/

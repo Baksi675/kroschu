@@ -12,12 +12,12 @@
 #include "freertos/projdefs.h"
 #include <stdlib.h>
 #include <string.h>
-#include "esp_err.h"			// Required for ESP_ERROR_CHECK()
-#include "esp_event.h"			// Required for event driver programming (esp_event_... functions)
-#include "esp_wifi.h"			// Required for the Wi-Fi
-#include "nvs_flash.h"			// Required for nvs_flash_init()
-#include "esp_netif.h"			// Required for esp_netif_init()
-#include "esp_now.h"			// Required for ESP-NOW
+#include "esp_err.h"			
+#include "esp_event.h"		
+#include "esp_wifi.h"			
+#include "nvs_flash.h"		
+#include "esp_netif.h"	
+#include "esp_now.h"		
 #include "esp_log.h"
 #include <stdint.h>
 #include "esp_timer.h"
@@ -86,9 +86,12 @@ static const char *mac_str_arr[10] = {
 };
 /*******************************END: GLOBAL VARIABLES PRIVATE TO MODULE*******************************/
 
-/*******************************BEGIN: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
+/*******************************BEGIN: CALLBACK FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 static void hub_espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status);
 static void hub_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
+/*******************************END: CALLBACK FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
+
+/*******************************BEGIN: HELPER FUNCTION PROTOTYPES PRIVATE TO MODULE*******************************/
 static void hub_connect_peer(PEER_t g_peer);
 static void hub_disconnect_peer(PEER_t g_peer);
 static void hub_print_mac_addr(void);
@@ -167,7 +170,7 @@ static void hub_speed_measurement_task(void *arg);
 				  used from other functions.
  *****************************************************************************/
 void hub_spawn_comm_task(PEER_t	peer) {
-    PEER_t *peer_arg = malloc(sizeof(PEER_t));			// Memory on the heap won't get freed after function returns
+    PEER_t *peer_arg = malloc(sizeof(PEER_t));		
     if (peer_arg == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for peer");
         return;
@@ -208,7 +211,7 @@ void hub_spawn_comm_loop_task(PEER_t peer) {
 /*******************************API INFORMATION*******************************
  * @fn			- hub_spawn_comm_all_loop_task()
  * 
- * @brief		- Spawns a communication task with all peers, which is either looping or not.. 			  
+ * @brief		- Spawns a communication task with all peers, which is either looping or not. 			  
  * 
  * @param[in]	- Whether to loop.
  * @param[in]	- none
@@ -222,6 +225,10 @@ void hub_spawn_comm_loop_task(PEER_t peer) {
  *****************************************************************************/
 void hub_spawn_comm_all_loop_task(int loop) {
 	int *p_loop = malloc(sizeof(loop));
+	if (p_loop == NULL) {
+		ESP_LOGE(TAG, "Failed to allocate memory.");
+		return;
+	}
 	*p_loop = loop;
 
 	xTaskCreatePinnedToCore(hub_comm_all_task, "HubCommAllTask", 4096, (void*)p_loop,
@@ -249,7 +256,7 @@ void hub_spawn_measurement_task(void) {
 /*******************************API INFORMATION*******************************
  * @fn			- hub_delete_measurement_task()
  * 
- * @brief		- Deletes the measurement task created. 			  
+ * @brief		- Deletes the measurement task created before. 			  
  * 
  * @param[in]	- none
  * @param[in]	- none
@@ -264,8 +271,8 @@ void hub_delete_measurement_task(void) {
 }
 
 /*******************************END: APIs EXPOSED BY THIS MODULE*******************************/
- 
-/*******************************BEGIN: HELPER FUNCTION DEFINITIONS*******************************/
+
+/*******************************BEGIN: CALLBACK FUNCTION DEFINITIONS*******************************/
 
 /*******************************FUNCTION INFORMATION*******************************
  * @fn			- hub_espnow_send_cb()
@@ -273,8 +280,8 @@ void hub_delete_measurement_task(void) {
  * @brief		- Passes the result of a send (success or fail) to a communication
  *				  channel (queue).
  * 
- * @param[in]	- Information about the sender, receiver, and message
- * @param[in]	- Data sent successfully or not
+ * @param[out]	- Information about the sender, receiver, and message
+ * @param[out]	- Data sent successfully or not
  * @param[in]	- none
  * 
  * @return		- none
@@ -326,6 +333,10 @@ static void hub_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8
         portYIELD_FROM_ISR();
     }
 }
+
+/*******************************END: CALLBACK FUNCTION DEFINITIONS*******************************/
+ 
+/*******************************BEGIN: HELPER FUNCTION DEFINITIONS*******************************/
 
 /*******************************FUNCTION INFORMATION*******************************
  * @fn			- hub_connect_peers()
@@ -388,6 +399,19 @@ static void hub_print_mac_addr(void) {
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
+/*******************************FUNCTION INFORMATION*******************************
+ * @fn			- hub_peer_arr_init()
+ * 
+ * @brief		- Parses the MAC addresses from menuconfig to uint8_t type
+ * 
+ * @param[in]	- none
+ * @param[in]	- none
+ * @param[in]	- none
+ * 
+ * @return		- none
+ * 
+ * @note		- none
+ *****************************************************************************/
 static void hub_peer_arr_init(void) {
 	for (int i = 0; i < PEER_ARR_SIZE; i++) {
 		int b[6];
@@ -443,6 +467,7 @@ static void hub_comm_task(void *arg) {
 		delete_task = false;
 
 		start_us = esp_timer_get_time();
+
 		// Send cmd data
 		esp_err_t err = esp_now_send(peer_cpy.mac_addr, cmd, sizeof(cmd));
 		if (err != ESP_OK) {
